@@ -1,0 +1,26 @@
+{
+  "name": "nubo-management-desktop",
+  "version": "1.0.0",
+  "description": "Nubo Management Desktop Device",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nubosoftware/nubo-management-desktop.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nubosoftware/nubo-management-desktop/issues"
+  },
+  "homepage": "https://github.com/nubosoftware/nubo-management-desktop#readme",
+  "dependencies": {
+    "async": "^3.2.2",
+    "underscore": "1.13.1",
+    "sequelize": "^6.3.5",
+    "dockerode": "^3.3.1",
+    "md5-file": "^5.0.0"
+  }
+}
