@@ -118,6 +118,7 @@ async function createImageForUser(email,domain) {
             }
         });
         logger.info(`Updated user ${email} with image name ${imageName}`);
+        return imageName;
     } catch (err) {
         logger.error(`createImageForUser error: ${err}`, err);
         throw err;
@@ -266,7 +267,10 @@ CMD ["supervisord"]`;
     }
 
 
-
+    if (!imageID) {
+        console.log(`Build error. Output: ${JSON.stringify(output,null,2)}`);
+        throw new Error("Unable to build image");
+    }
 
     console.log(`Finished build. imageID: ${imageID}`);
 

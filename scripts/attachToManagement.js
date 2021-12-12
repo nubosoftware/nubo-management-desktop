@@ -71,6 +71,7 @@ async function main() {
                 Settings: require('./settings'),
                 AddAppsToProfiles: require('./ControlPanel/addAppsToProfiles'),
                 PlatformModule: require('./platform'),
+                NfsModule: require('./nfs'),
             });
         }
         

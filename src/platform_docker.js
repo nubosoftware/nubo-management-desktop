@@ -6,7 +6,7 @@ var async = require('async');
 
 var execFile = require('child_process').execFile;
 
-var stop_platform = function(platform, platType, callback) {
+var start_platform = function(platform, platType, callback) {
     const { Common, NfsModule, PlatformModule } = require('./mainModule').get();
     const logger = Common.logger;
     var ssh = null;
@@ -124,7 +124,7 @@ var stop_platform = function(platform, platType, callback) {
 };
 
 
-var start_platform = function(platform, platType, callback) {
+var stop_platform = function(platform, platType, callback) {
     const { Common, PlatformModule } = require('./mainModule').get();
     const logger = Common.logger;
     async.waterfall([

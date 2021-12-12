@@ -10,6 +10,7 @@ var params = {
     Settings: null,
     AddAppsToProfiles: null,
     PlatformModule: null,
+    NfsModule: null,
 }
 
 function get() {
