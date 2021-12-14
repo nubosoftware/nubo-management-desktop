@@ -75,10 +75,14 @@ async function main() {
             });
         }
         
+        function isPresent() {
+            return true;
+        }
         
         module.exports = {
             get,
-            init
+            init,
+            isPresent
         }               
 `;
         const moduleLoaderFile = path.join(mgmtpath,"src/desktopModuleLoader.js")
