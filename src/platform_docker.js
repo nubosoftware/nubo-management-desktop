@@ -59,6 +59,8 @@ var start_platform = function(platform, platType, callback) {
                     var descPlatform = {
                         platType: "docker",
                         registryURL: Common.registryURL,
+                        registryUser: Common.registryUser,
+                        registryPassword: Common.registryPassword,
                         platid: platform.params.platid,
                         platUID: platform.params.platUID,
                         gateway: gwParams,
