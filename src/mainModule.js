@@ -11,6 +11,7 @@ var params = {
     AddAppsToProfiles: null,
     PlatformModule: null,
     NfsModule: null,
+    nubocronAPI: null,
 }
 
 function get() {

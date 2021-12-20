@@ -3,7 +3,8 @@
 const { docker,
     followProgress,
     pullImage,
-    execDockerCmd } = require('./dockerUtils');
+    execDockerCmd,
+    deleteImageFromRegistry } = require('./dockerUtils');
 
 const fs = require('fs').promises;
 const crypto = require('crypto');
@@ -18,7 +19,32 @@ const FINISHED = 0;
 const COPYING = 1;
 const INSTALLING = 2;
 
+let initialized = false;
 
+
+async function init() {
+    if (initialized) {
+        return;
+    }
+    const { Common } = require('./mainModule').get();
+    const registryURL = Common.registryURL;
+    const registryUser = Common.registryUser;
+    const registryPassword = Common.registryPassword;
+    if (registryURL && registryUser && registryPassword) {
+        await execDockerCmd(['login', '-u', registryUser, '-p',registryPassword,registryURL]);
+    }
+    initialized = true;
+}   
+
+
+function getDefaultApps() {
+    const { Common } = require('./mainModule').get();
+    if (Common.desktopDefaultApps) {
+        return Common.desktopDefaultApps;
+    } else {
+        return require('./defaultApps');
+    }
+}
 
 function getUserPlatforms(email, deviceIds) {
     const { AddAppsToProfiles } = require('./mainModule').get();
@@ -57,6 +83,9 @@ async function createImageForUser(email,domain) {
     const { Common } = require('./mainModule').get();
     const logger = Common.logger;
     try {
+        if (!initialized) {
+            await init();
+        }
         // get a list of all apps that this user have
         let userApps = await Common.db.UserApps.findAll({
             attributes: ['packagename'],
@@ -74,7 +103,7 @@ async function createImageForUser(email,domain) {
                 maindomain: domain,
                 apptype: 'deb'
             },
-            order: [['packagename', 'ASC']],
+            order: [['updatedAt','ASC'],['packagename', 'ASC']],
         });
         //logger.info(`allDebApps: ${JSON.stringify(allDebApps, null, 2)}`);
 
@@ -82,8 +111,21 @@ async function createImageForUser(email,domain) {
         let allJSON = JSON.stringify(allDebApps);
         const hash = crypto.createHash('sha256').update(allJSON, 'utf-8').digest('hex').toLowerCase();
 
+        // look for the hash in the AppImages table
+        let imageName;
+        let imageObj = await Common.db.Images.findOne({      
+            where: {
+                maindomain: domain,
+                content_hash: hash                                
+            },
+        });
+        if (imageObj) {
+            imageName = imageObj.image_name;
+            logger.info(`Hash found: ${hash}`);
+        }
+        
         // try to find the exact hash as a file in docker_apps dir
-        let appsFolder = `./docker_apps`;
+        /*let appsFolder = `./docker_apps`;
         await fs.mkdir(appsFolder, { recursive: true });
         let imageName;
         let imageHashFile = path.join(appsFolder, `img_${hash}.json`);
@@ -94,15 +136,23 @@ async function createImageForUser(email,domain) {
             imageName = obj.imageName;
         } catch (err) {
             //console.log(`Image not found`,err);
-        }
+        }*/
         if (!imageName) {
+            logger.info(`Hash not found: ${hash}!`);
             // generate image and create a file
             imageName = await createImage(allDebApps);
+
+            // insert new image with the hash to DB
+            await Common.db.Images.upsert({
+                maindomain: domain,
+                image_name: imageName,
+                content_hash: hash
+            });
             // create file with the image details
-            await fs.writeFile(imageHashFile, JSON.stringify({
+            /*await fs.writeFile(imageHashFile, JSON.stringify({
                 imageName,
                 apps: allDebApps
-            }));
+            }));*/
 
         } else {
             logger.info(`Image found: ${imageName}`);
@@ -200,7 +250,9 @@ async function createImage(allDebApps) {
     const logger = Common.logger;
     const registryURL = Common.registryURL;
     const baseImage = `${registryURL}/nubo/${BASE_IMAGE}`;
-
+    if (!initialized) {
+        await init();
+    }
 
 
     await pullImage(baseImage);
@@ -286,14 +338,107 @@ CMD ["supervisord"]`;
     return imageName;
 }
 
+/**
+ * Clean the system from all un-used images.
+ * If domain name is provided do that only for the specific domain
+ * @param {*} domain 
+ */
+async function cleanImages(domain) {
+    const { Common } = require('./mainModule').get();
+    const logger = Common.logger;
+    try {
+        logger.info(`Running cleanImages job...`);
+        if (!initialized) {
+            await init();
+        }
+        // get list of all images assigned to users
+        const { Op, fn , col } = require('sequelize');
+        let qu = {
+            attributes: [
+                [fn('DISTINCT', col('docker_image')) ,'docker_image'],
+                'orgdomain',                
+            ],
+            where : {
+                docker_image: {
+                    [Op.not]: null, // Like: docker_image IS NOT NULL
+                },
+            }
+        }
+        if (domain) {
+            qu.where.orgdomain = domain;
+        }
+        let assignedImages = await Common.db.User.findAll(qu);
+        let assignedMap = {};
+        if (assignedImages) {
+            for (const imgObj of assignedImages) {
+                if (imgObj.docker_image) {
+                    assignedMap[`${imgObj.orgdomain}_${imgObj.docker_image}`] = imgObj;
+                }
+            }
+        } 
+
+        // get all registered images
+        let q = {
+            attributes: ['maindomain','image_name'],            
+        };
+        if (domain) {
+            q.where = {
+                maindomain: domain
+            }
+        }
+        let images = await Common.db.Images.findAll(q);
+        if (images) {
+            for (const imgObj of images) {
+                const key = `${imgObj.maindomain}_${imgObj.image_name}`;
+                const assignedObj = assignedMap[key];
+                if (!assignedObj) {
+                    console.log(`Image ${imgObj.image_name} of domain ${imgObj.maindomain} not found!`);
+                    await deleteImageFromRegistry(imgObj.image_name,Common.registryURL,Common.registryUser,Common.registryPassword);
+                    try  {
+                        await execDockerCmd(['image','rm',`${Common.registryURL}/nubo/${imgObj.image_name}`]);
+                    } catch (err) {
+                        console.log(`Image delete error. Image: ${Common.registryURL}/nubo/${imgObj.image_name}, Error: ${err}`);
+                    }
+                    try {
+                        await execDockerCmd(['image','rm',imgObj.image_name]);                    
+                    } catch (err) {
+                        console.log(`Image delete error. Image: ${imgObj.image_name}, Error: ${err}`);
+                    }
+                    await Common.db.Images.destroy({
+                        where : {
+                            maindomain : imgObj.maindomain,
+                            image_name: imgObj.image_name
+                        }
+                    });
+                    
+                } else {
+
+                    console.log(`Image ${assignedObj.docker_image} of domain ${assignedObj.orgdomain} found.`);                    
+                    delete assignedMap[key];
+                }
+            }
+        }
+        // iterate on all user images that left and insert them to the images table
+        for (const key in assignedMap) {
+            const imgObj = assignedMap[key];
+            console.log(`Image ${imgObj.docker_image} of domain ${imgObj.orgdomain} need to be added to images!`);
+            await Common.db.Images.upsert({
+                maindomain: imgObj.orgdomain,
+                image_name: imgObj.docker_image,
+                content_hash: "NA"
+            });
+        }
+    } catch (err) {
+        logger.error(`cleanImages error: ${err}`,err);
+    }
+}
+
 async function uploadApp(req, res) {
     const { Common, CommonUtils, User } = require('./mainModule').get();
     const logger = Common.logger;
     let resultSent = false;
     let packageName;
-    let versionName;
-    let appName;
-    let appDescription;
+    let appDetails;
     let maindomain;
     try {
         let adminLogin = req.nubodata.adminLogin;
@@ -308,72 +453,40 @@ async function uploadApp(req, res) {
         const baseImage = `${registryURL}/nubo/${BASE_IMAGE}`;
         let fileName = req.params.fileName;
         packageName = req.params.packageName;
-
-        let aptShow;
-        let appFilePath;
-        let appFileName;
-        if (packageName) {
-            // retrieve info about the package
-            const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', '/usr/bin/apt',
-                baseImage, 'show', packageName]);
-            aptShow = stdout;
-        } else if (fileName) {
-            // get full path of file
+        let app = {
+            packagename: packageName,           
+        }
+        if (fileName) {
             let srcFilePath = CommonUtils.buildPath(Common.nfshomefolder, User.getUserStorageFolder(email), "media/Download/", fileName);
             // copy deb file to local deb folders
             let appsFolder = `./docker_apps`;
             await fs.mkdir(appsFolder, { recursive: true });
-            appFileName = crypto.randomBytes(32).toString('hex') + ".deb";
-            appFilePath = path.resolve(path.join(appsFolder, appFileName));
-            await fs.copyFile(srcFilePath, appFilePath);
-            const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', '/usr/bin/apt',
-                '-v', `${appFilePath}:/root/${appFileName}`,
-                baseImage, 'show', `/root/${appFileName}`]);
-            aptShow = stdout;
-        } else {
-            throw new Error("Invalid parameters. Both packageName and fileName are missing");
+            app.appFileName = crypto.randomBytes(32).toString('hex') + ".deb";
+            app.appFilePath = path.resolve(path.join(appsFolder, app.appFileName));
+            await fs.copyFile(srcFilePath, app.appFilePath);
         }
-        
-        let debDetails = {};
-        const lines = aptShow.split("\n");
-        let prevLines = "";
-        for (let i = lines.length - 1; i >= 0; i--) {
-            const line = lines[i];
-            if (line[0] == " ") {
-                prevLines = "\n" + line[0].trim() + prevLines;
-            } else {
-                let ind = line.indexOf(":");
-                let key = line.substring(0, ind).toLowerCase();
-                let value = line.substring(ind + 1).trim() + prevLines;
-                prevLines = "";
-                if (key)
-                    debDetails[key] = value;
-            }
-        }
-        console.log(JSON.stringify(debDetails, null, 2));
 
-        packageName = debDetails.package;
-        versionName = debDetails.version;
-        appName = packageName.charAt(0).toUpperCase() + packageName.slice(1);
-        appDescription = debDetails.description;
-        if (!packageName || !versionName) {
-            throw new Error("package or version is missing in deb details");
+        appDetails = await fetchAppDetails(app);
+        if (!appDetails) {
+            throw new Error("Unable to fetch app details");
         }
-        await updateApkProgress(packageName, "", versionName, maindomain, appName, appDescription, COPYING, '');
+
+            
+        await updateApkProgress(appDetails.packageName, "", appDetails.versionName, maindomain, appDetails.appName, appDetails.description, COPYING, '');
 
         let msg = "Install in progress";
         res.send({
             status: 1,
             message: msg,
-            packageName,
-            versionName,
+            packageName: appDetails.packageName,
+            versionName: appDetails.versionName,
             versionCode: 1,
             maindomain,
-            appName
+            appName: appDetails.appName
         });
         resultSent = true;
         let savedFileName = '';
-        if (appFilePath) {
+        if (app.appFilePat) {
             // copy file to debs folder
             let debsFolder = CommonUtils.buildPath(Common.nfshomefolder, 'debs');
             await fs.mkdir(debsFolder, { recursive: true });
@@ -402,7 +515,7 @@ async function uploadApp(req, res) {
             } while (foundFile);
             await fs.copyFile(appFilePath, savedPath);
         }
-        await updateApkProgress(packageName, savedFileName, versionName, maindomain, appName, appDescription, FINISHED, '');
+        await updateApkProgress(appDetails.packageName, savedFileName, appDetails.versionName, maindomain, appDetails.appName, appDetails.description, FINISHED, '');
 
 
 
@@ -414,7 +527,11 @@ async function uploadApp(req, res) {
             res.send({ status: '0', message: `Error: ${err}` });
         } else {
             try {
-                await updateApkProgress(packageName, "", versionName, maindomain, appName, appDescription, ERROR, `${err}`);
+                if (appDetails) {
+                    await updateApkProgress(appDetails.packageName, "", appDetails.versionName, maindomain, appDetails.appName, appDetails.description, ERROR, `${err}`);
+                } else {
+                    await updateApkProgress(packageName,"","",maindomain,"","", ERROR, `${err}`);
+                }
             } catch (err2) {
 
             }
@@ -434,6 +551,88 @@ function updateApkProgress(packageName, fileName, versionName, mainDomain, appNa
             }
         });
     });
+}
+
+async function fetchAppDetails(app) {
+    const { Common } = require('./mainModule').get();
+    const logger = Common.logger;
+    try {
+        if (!initialized) {
+            await init();
+        }
+        const registryURL = Common.registryURL;
+        const baseImage = `${registryURL}/nubo/${BASE_IMAGE}`;
+        let aptShow;
+        if (!app.appFilePath && app.packagename) {
+            // retrieve info about the package
+            const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', 'apt-exec.sh',
+                baseImage, 'show', app.packagename]);
+            aptShow = stdout;
+        } else if (app.appFilePath && app.appFileName) {            
+            const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', 'apt-exec.sh',
+                '-v', `${app.appFilePath}:/tmp/${app.appFileName}`,
+                baseImage, 'show', `/tmp/${appFileName}`]);
+            aptShow = stdout;
+        } else {
+            throw new Error("Invalid parameters. Both app.packagename and app.appFileName are missing");
+        }
+        
+        let debDetails = {};
+        const lines = aptShow.split("\n");
+        let prevLines = "";
+        for (let i = lines.length - 1; i >= 0; i--) {
+            const line = lines[i];
+            if (line[0] == " ") {
+                prevLines = "\n" + line[0].trim() + prevLines;
+            } else {
+                let ind = line.indexOf(":");
+                let key = line.substring(0, ind).toLowerCase();
+                let value = line.substring(ind + 1).trim() + prevLines;
+                prevLines = "";
+                if (key)
+                    debDetails[key] = value;
+            }
+        }
+        console.log(JSON.stringify(debDetails, null, 2));
+
+        app.packageName = debDetails.package;
+        app.versionName = debDetails.version;
+        if (!app.appName) {
+            app.appName = app.packageName.charAt(0).toUpperCase() + app.packageName.slice(1);
+        }
+        if (!app.description) {
+            app.description = debDetails.description;
+        }
+        if (!app.packageName || !app.versionName) {
+            throw new Error("package or version is missing in deb details");
+        }
+        return app;
+    } catch (err) {
+        logger.error(`Error while fetch app details. Error: ${err}`,err);
+        // null indicatew that we were unable to retrieve information about this app
+        return null;
+    }
+}
+
+async function attachToDomainDefaultApps(domain) {
+    const { Common, CommonUtils } = require('./mainModule').get();
+    const logger = Common.logger;
+    try {
+        let apps = getDefaultApps();
+        console.log(JSON.stringify(apps,null,2));
+        for (const app of apps) {
+            if (app.appFileName) {
+                app.appFilePath = CommonUtils.buildPath(Common.nfshomefolder, 'debs',app.appFileName);
+            }
+            let appDetails = await fetchAppDetails(app);
+            if (appDetails) {
+                let appFileName = (appDetails.appFileName ? appDetails.appFileName : "");
+                await updateApkProgress(appDetails.packageName, appFileName, appDetails.versionName ,domain, appDetails.appName, appDetails.description, FINISHED, '');
+            }
+        }
+    } catch (err) {
+        logger.error(`Error adding default apps to domain. Error: ${err}`,err);        
+    }
 }
 
 async function aptList(req, res) {
@@ -465,11 +664,14 @@ async function aptList(req, res) {
 
         const registryURL = Common.registryURL;
         const baseImage = `${registryURL}/nubo/${BASE_IMAGE}`;
+        if (!initialized) {
+            await init();
+        }
 
         // ensure we have the latest version of the image
         await pullImage(baseImage);
         //
-        const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', '/usr/bin/apt', baseImage, 'list']);
+        const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', 'apt-exec.sh', baseImage, 'list']);
 
         logger.info(`Fetched apt list..`);
         // ensure folder exists for apt.list file
@@ -500,5 +702,8 @@ module.exports = {
     aptList,
     uploadApp,
     addRemoveAppsForDevices,
-    createImageForUser
+    createImageForUser,
+    getDefaultApps,
+    attachToDomainDefaultApps,
+    cleanImages
 }

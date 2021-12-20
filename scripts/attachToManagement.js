@@ -72,6 +72,7 @@ async function main() {
                 AddAppsToProfiles: require('./ControlPanel/addAppsToProfiles'),
                 PlatformModule: require('./platform'),
                 NfsModule: require('./nfs'),
+                nubocronAPI: require('./nubocronAPI'),
             });
         }
         

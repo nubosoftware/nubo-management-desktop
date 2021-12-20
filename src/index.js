@@ -62,12 +62,27 @@ function handleRestApiRequest(objectType, arg1, arg2, arg3, perms, adminLogin, r
     return false;
 }
 
+function addDaemonHandlers() {
+    const { Common, nubocronAPI } = require('./mainModule').get();
+    const logger = Common.logger;
+    try {
+        logger.info(`Adding cleanImages job...`);
+        var cmd = [];
+        cmd.push(require('./cronJobs').jobs.CLEAN_IMAGES);
+        nubocronAPI.addJobToDB("domain", 'cleanImages', true, '*/1 * * * *', 'Etc/UTC', cmd.join(','), true, Common.dcName, function(err) {});
+    } catch (err) {
+        logger.error(`addDaemonHandlers Error: ${err} `, err);
+    }
+}
+
 module.exports = {
     init,
     restGet,
     addPublicServerHandlers,
     addPlatformServiceHandlers,
     handleRestApiRequest,
+    addDaemonHandlers,
     debs: require('./debs'),
     parametersMap: require('./parameters-map'),
+    cronJobs: require('./cronJobs'),
 }

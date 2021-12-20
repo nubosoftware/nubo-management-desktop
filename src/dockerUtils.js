@@ -2,13 +2,14 @@
 const Docker = require('dockerode');
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 const execFile = require('child_process').execFile;
-
+const axios = require('axios');
 module.exports = {
     docker,
     followProgress,
     pullImage,
     execCmd,
     execDockerCmd,
+    deleteImageFromRegistry,
 };
 
 
@@ -28,6 +29,52 @@ function execDockerCmd(params) {
             return;
         });
     });
+}
+
+async function deleteImageFromRegistry(imageName,registryURL,registryUser,registryPassword) {
+    let arr = imageName.split(":");
+    let repo = arr[0];
+    let tag = arr[1];
+    if (!tag) {
+        tag = "latest";
+    }
+    const auth =  Buffer.from(`${registryUser}:${registryPassword}`).toString("base64");
+    
+    let digest;
+    try {
+        let response = await axios({
+            method: "get",
+            url: `http://${registryURL}/v2/nubo/${repo}/manifests/${tag}`,
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Accept': 'application/vnd.docker.distribution.manifest.v2+json'
+            }        
+        });
+        //console.log(`deleteImageFromRegistry. Headers: ${JSON.stringify(response.headers,null,2)} `);
+        
+        digest = response.headers['docker-content-digest'];
+    } catch (err) {
+        console.log(`Error image not found in registry: ${err}`);
+    }
+    if (digest) {
+        try {
+            let conf = {
+                method: "delete",
+                url: `http://${registryURL}/v2/nubo/${repo}/manifests/${digest}`,
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'Accept': 'application/vnd.docker.distribution.manifest.v2+json'
+                },
+                data: null,     
+            };
+            //console.log(`request: ${JSON.stringify(conf,null,2)}`);
+            let delres = await axios(conf);
+            console.log(`Deleted image from registry. Status ${delres.status}`);
+        } catch (err) {
+            console.log(`Error failed to delete image from registry: ${err}`);
+        }
+    }
+
 }
 
 async function execCmd(container, cmd) {
