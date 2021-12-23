@@ -3,6 +3,9 @@ const Docker = require('dockerode');
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 const execFile = require('child_process').execFile;
 const axios = require('axios');
+const fs = require('fs').promises;
+const https = require('https');
+const _ = require('underscore');
 module.exports = {
     docker,
     followProgress,
@@ -13,15 +16,18 @@ module.exports = {
 };
 
 
-function execDockerCmd(params) {
+function execDockerCmd(args,options) {
     return new Promise((resolve, reject) => {
-        execFile('/usr/bin/docker', params, {maxBuffer: 1024 * 1024 * 10} , function (error, stdout, stderr) {
+        let opts = {maxBuffer: 1024 * 1024 * 10};
+        if (options) {
+            _.extend(opts, options)
+        }
+        execFile('/usr/bin/docker', args,  opts, function (error, stdout, stderr) {
             if (error) {               
                 reject(error);
             }
 
-            //logger.info("compileApk: " + stdout);
-            //logger.info("execDockerCmd: app " + "\'" + stdout + "\'");
+            //logger.info("execDockerCmd: " + stdout);            
             resolve({
                 stdout,
                 stderr
@@ -39,16 +45,19 @@ async function deleteImageFromRegistry(imageName,registryURL,registryUser,regist
         tag = "latest";
     }
     const auth =  Buffer.from(`${registryUser}:${registryPassword}`).toString("base64");
+    const caStr = await fs.readFile(`/etc/docker/certs.d/${registryURL}/ca.crt`,"utf8");
+    const httpsAgent = new https.Agent({ ca: caStr });
     
     let digest;
     try {
         let response = await axios({
             method: "get",
-            url: `http://${registryURL}/v2/nubo/${repo}/manifests/${tag}`,
+            url: `https://${registryURL}/v2/nubo/${repo}/manifests/${tag}`,
             headers: {
                 'Authorization': `Basic ${auth}`,
                 'Accept': 'application/vnd.docker.distribution.manifest.v2+json'
-            }        
+            },
+            httpsAgent        
         });
         //console.log(`deleteImageFromRegistry. Headers: ${JSON.stringify(response.headers,null,2)} `);
         
@@ -60,11 +69,12 @@ async function deleteImageFromRegistry(imageName,registryURL,registryUser,regist
         try {
             let conf = {
                 method: "delete",
-                url: `http://${registryURL}/v2/nubo/${repo}/manifests/${digest}`,
+                url: `https://${registryURL}/v2/nubo/${repo}/manifests/${digest}`,
                 headers: {
                     'Authorization': `Basic ${auth}`,
                     'Accept': 'application/vnd.docker.distribution.manifest.v2+json'
                 },
+                httpsAgent,
                 data: null,     
             };
             //console.log(`request: ${JSON.stringify(conf,null,2)}`);
@@ -118,9 +128,11 @@ function followProgress(stream) {
 }
 async function pullImage(fullName) {
     //let fullName = registryURL + imageName;
-    let stream = await docker.pull(fullName);
-    let output = await followProgress(stream);
-    //console.log(`Pull result: ${output}`);
+    // let stream = await docker.pull(fullName);
+    // let output = await followProgress(stream);
+    //console.log(`Pull result: ${output}`);   
+    await execDockerCmd(['pull',fullName]);
+    
     
     return;
 }

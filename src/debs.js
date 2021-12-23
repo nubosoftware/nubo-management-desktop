@@ -285,8 +285,10 @@ async function createImage(allDebApps) {
         }
     }
     let debFile = "";
-    let dockerFileStr = `
+    let buildDate=new Date().toDateString();
+    let dockerFileStr = `    
 FROM ${baseImage}
+LABEL build_date="${buildDate}"
 RUN apt-get -y update
 ${aptCmds.join("\n")}
 ${fileCmds.join("\n")}
@@ -299,7 +301,11 @@ CMD ["supervisord"]`;
 
 
     console.log(`build image at ${buildFolder}`);
-    let stream = await docker.buildImage({
+
+    const {stdout } = await execDockerCmd(['build', '.', '-t', imageName],{cwd: buildFolder}); //'--no-cache',
+    //console.log(`docker build: ${stdout}`);
+
+    /*let stream = await docker.buildImage({
         context: buildFolder,
         src: srcList,
     }, { t: imageName });
@@ -316,15 +322,20 @@ CMD ["supervisord"]`;
                 break;
             }
         }
-    }
+    }*/
 
-
-    if (!imageID) {
-        console.log(`Build error. Output: ${JSON.stringify(output,null,2)}`);
+    let imageID;
+    const regex = /Successfully built ([a-fA-F0-9]+)/
+    let m = stdout.match(regex);
+    if (m && m[1]) {
+        imageID = m[1];        
+    } else {
+        console.log(`Build error. Output: ${JSON.stringify(stdout,null,2)}`);
         throw new Error("Unable to build image");
     }
 
     console.log(`Finished build. imageID: ${imageID}`);
+    //console.log(`Finished build`);
 
 
     const repo = `${registryURL}/nubo/${imageName}`;
@@ -333,7 +344,7 @@ CMD ["supervisord"]`;
     console.log("push");
     await execDockerCmd(['image', 'push', repo]);
 
-    await fs.rmdir(buildFolder, { recursive: true });
+    await fs.rm(buildFolder, { recursive: true });
 
     return imageName;
 }
@@ -413,7 +424,7 @@ async function cleanImages(domain) {
                     
                 } else {
 
-                    console.log(`Image ${assignedObj.docker_image} of domain ${assignedObj.orgdomain} found.`);                    
+                    //onsole.log(`Image ${assignedObj.docker_image} of domain ${assignedObj.orgdomain} found.`);                    
                     delete assignedMap[key];
                 }
             }
