@@ -66,10 +66,10 @@ function addDaemonHandlers() {
     const { Common, nubocronAPI } = require('./mainModule').get();
     const logger = Common.logger;
     try {
-        logger.info(`Adding cleanImages job...`);
+        //logger.info(`Adding cleanImages job...`);
         var cmd = [];
         cmd.push(require('./cronJobs').jobs.CLEAN_IMAGES);
-        nubocronAPI.addJobToDB("domain", 'cleanImages', true, '*/1 * * * *', 'Etc/UTC', cmd.join(','), true, Common.dcName, function(err) {});
+        nubocronAPI.addJobToDB("domain", 'cleanImages', true, '35 0 * * *', 'Etc/UTC', cmd.join(','), true, Common.dcName, function(err) {});
     } catch (err) {
         logger.error(`addDaemonHandlers Error: ${err} `, err);
     }
