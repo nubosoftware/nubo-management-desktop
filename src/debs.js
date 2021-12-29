@@ -497,7 +497,7 @@ async function uploadApp(req, res) {
         });
         resultSent = true;
         let savedFileName = '';
-        if (app.appFilePat) {
+        if (app.appFilePath) {
             // copy file to debs folder
             let debsFolder = CommonUtils.buildPath(Common.nfshomefolder, 'debs');
             await fs.mkdir(debsFolder, { recursive: true });
@@ -511,7 +511,7 @@ async function uploadApp(req, res) {
                 try {
                     await fs.stat(savedPath);
                     if (!md5new) {
-                        md5new = await md5File(appFilePath);
+                        md5new = await md5File(app.appFilePath);
                     }
                     let md5Saved = await md5File(savedPath);
                     if (md5new == md5Saved) {
@@ -524,7 +524,7 @@ async function uploadApp(req, res) {
                     foundFile = false;
                 }
             } while (foundFile);
-            await fs.copyFile(appFilePath, savedPath);
+            await fs.copyFile(app.appFilePath, savedPath);
         }
         await updateApkProgress(appDetails.packageName, savedFileName, appDetails.versionName, maindomain, appDetails.appName, appDetails.description, FINISHED, '');
 
@@ -582,7 +582,7 @@ async function fetchAppDetails(app) {
         } else if (app.appFilePath && app.appFileName) {            
             const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', 'apt-exec.sh',
                 '-v', `${app.appFilePath}:/tmp/${app.appFileName}`,
-                baseImage, 'show', `/tmp/${appFileName}`]);
+                baseImage, 'show', `/tmp/${app.appFileName}`]);
             aptShow = stdout;
         } else {
             throw new Error("Invalid parameters. Both app.packagename and app.appFileName are missing");

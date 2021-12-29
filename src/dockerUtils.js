@@ -45,15 +45,9 @@ async function deleteImageFromRegistry(imageName,registryURL,registryUser,regist
         tag = "latest";
     }
     const auth =  Buffer.from(`${registryUser}:${registryPassword}`).toString("base64");
-    let agentOpts = {};
-    try {
-        const caStr = await fs.readFile(`/etc/docker/certs.d/${registryURL}/ca.crt`,"utf8");
-        if (caStr) {
-            agentOpts.ca = caStr;
-        }
-    } catch (e) {
-        // ignore file not found error
-    }
+    let agentOpts = {
+        rejectUnauthorized: false
+    };
     const httpsAgent = new https.Agent(agentOpts);
     
     let digest;
