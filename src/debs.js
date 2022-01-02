@@ -474,6 +474,7 @@ async function uploadApp(req, res) {
             await fs.mkdir(appsFolder, { recursive: true });
             app.appFileName = crypto.randomBytes(32).toString('hex') + ".deb";
             app.appFilePath = path.resolve(path.join(appsFolder, app.appFileName));
+            app.srcFilePath = srcFilePath;
             await fs.copyFile(srcFilePath, app.appFilePath);
         }
 
@@ -579,9 +580,9 @@ async function fetchAppDetails(app) {
             const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', 'apt-exec.sh',
                 baseImage, 'show', app.packagename]);
             aptShow = stdout;
-        } else if (app.appFilePath && app.appFileName) {            
+        } else if (app.appFilePath && app.appFileName && app.srcFilePath) {            
             const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', 'apt-exec.sh',
-                '-v', `${app.appFilePath}:/tmp/${app.appFileName}`,
+                '-v', `${app.srcFilePath}:/tmp/${app.appFileName}`,
                 baseImage, 'show', `/tmp/${app.appFileName}`]);
             aptShow = stdout;
         } else {

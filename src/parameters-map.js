@@ -1,7 +1,7 @@
-var constraints = require("nubo-validateConstraints")(false);
 
 
-function getParameterMapRules() {
+
+function getParameterMapRules(constraints) {
     const rules = [
         
     ];
