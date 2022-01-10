@@ -124,19 +124,6 @@ async function createImageForUser(email,domain) {
             logger.info(`Hash found: ${hash}`);
         }
         
-        // try to find the exact hash as a file in docker_apps dir
-        /*let appsFolder = `./docker_apps`;
-        await fs.mkdir(appsFolder, { recursive: true });
-        let imageName;
-        let imageHashFile = path.join(appsFolder, `img_${hash}.json`);
-        try {
-            await fs.stat(imageHashFile);            
-            let content = await fs.readFile(imageHashFile, 'utf8');
-            let obj = JSON.parse(content);
-            imageName = obj.imageName;
-        } catch (err) {
-            //console.log(`Image not found`,err);
-        }*/
         if (!imageName) {
             logger.info(`Hash not found: ${hash}!`);
             // generate image and create a file
@@ -147,12 +134,7 @@ async function createImageForUser(email,domain) {
                 maindomain: domain,
                 image_name: imageName,
                 content_hash: hash
-            });
-            // create file with the image details
-            /*await fs.writeFile(imageHashFile, JSON.stringify({
-                imageName,
-                apps: allDebApps
-            }));*/
+            });            
 
         } else {
             logger.info(`Image found: ${imageName}`);
@@ -249,7 +231,10 @@ async function createImage(allDebApps) {
     const { Common, CommonUtils } = require('./mainModule').get();
     const logger = Common.logger;
     const registryURL = Common.registryURL;
-    const baseImage = `${registryURL}/nubo/${BASE_IMAGE}`;
+    let baseImage = Common.baseImage;
+    if (!baseImage) {
+        baseImage = `${registryURL}/nubo/${BASE_IMAGE}`;
+    }
     if (!initialized) {
         await init();
     }
