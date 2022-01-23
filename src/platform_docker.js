@@ -78,9 +78,9 @@ var start_platform = function(platform, platType, callback) {
                         }
                     };
                     if(Common.platformParams.rsyslog) descPlatform.rsyslog = Common.platformParams.rsyslog;
-                    logger.info(`descPlatform: ${JSON.stringify(descPlatform,null,2)}`);
+                    //logger.info(`descPlatform: ${JSON.stringify(descPlatform,null,2)}`);
                     platform.startPlatform(descPlatform, function(err) {
-                        console.log(`platform.startPlatform. err: ${err}`);
+                        //console.log(`platform.startPlatform. err: ${err}`);
                         callback(err);
                     });
                 }
