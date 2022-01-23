@@ -19,7 +19,7 @@ var start_platform = function(platform, platType, callback) {
         var nfs;
         async.series([
                 function(callback) {                    
-                    platform.waitServiceRun(600, callback);                    
+                    platform.waitServiceRun(60, callback);                    
                 },                
                 function(callback){
                     platform.params.gatewayid = 0;
@@ -79,7 +79,10 @@ var start_platform = function(platform, platType, callback) {
                     };
                     if(Common.platformParams.rsyslog) descPlatform.rsyslog = Common.platformParams.rsyslog;
                     logger.info(`descPlatform: ${JSON.stringify(descPlatform,null,2)}`);
-                    platform.startPlatform(descPlatform, function(err) {callback(err);});
+                    platform.startPlatform(descPlatform, function(err) {
+                        console.log(`platform.startPlatform. err: ${err}`);
+                        callback(err);
+                    });
                 }
             ], function(err) {
                 if (ssh)
@@ -114,7 +117,7 @@ var start_platform = function(platform, platType, callback) {
                 if(!PlatformDesc) {
                     callback(err, platform);
                 } else {
-                    Stop_VMWare(platform, platType, function(err1) {
+                    stop_platform(platform, platType, function(err1) {
                         callback(err, platform);
                     });
                 }

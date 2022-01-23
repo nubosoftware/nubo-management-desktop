@@ -2,7 +2,7 @@
 
 function init(params){
     require('./mainModule').set(params);
-    params.Common.logger.info(`Initialize Desktop Module`);
+    //params.Common.logger.info(`Initialize Desktop Module`);
     require('./platforms').registerPlatforms();
 }
 
