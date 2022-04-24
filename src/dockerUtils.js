@@ -6,6 +6,17 @@ const axios = require('axios');
 const fs = require('fs').promises;
 const https = require('https');
 const _ = require('underscore');
+
+
+class ExecCmdError extends Error {
+    constructor(msg,err,stdout,stderr) {
+        super(msg);
+        this.err = err;
+        this.stdout = stdout;
+        this.stderr = stderr;
+    }
+}
+
 module.exports = {
     docker,
     followProgress,
@@ -13,6 +24,7 @@ module.exports = {
     execCmd,
     execDockerCmd,
     deleteImageFromRegistry,
+    ExecCmdError,
 };
 
 
@@ -23,11 +35,12 @@ function execDockerCmd(args,options) {
             _.extend(opts, options)
         }
         execFile('/usr/bin/docker', args,  opts, function (error, stdout, stderr) {
-            if (error) {               
-                reject(error);
+            if (error) {
+                let e = new ExecCmdError(`${error}`,error,stdout,stderr);
+                reject(e);
             }
 
-            //logger.info("execDockerCmd: " + stdout);            
+            //logger.info("execDockerCmd: " + stdout);
             resolve({
                 stdout,
                 stderr
@@ -49,7 +62,7 @@ async function deleteImageFromRegistry(imageName,registryURL,registryUser,regist
         rejectUnauthorized: false
     };
     const httpsAgent = new https.Agent(agentOpts);
-    
+
     let digest;
     try {
         let response = await axios({
@@ -59,10 +72,10 @@ async function deleteImageFromRegistry(imageName,registryURL,registryUser,regist
                 'Authorization': `Basic ${auth}`,
                 'Accept': 'application/vnd.docker.distribution.manifest.v2+json'
             },
-            httpsAgent        
+            httpsAgent
         });
         //console.log(`deleteImageFromRegistry. Headers: ${JSON.stringify(response.headers,null,2)} `);
-        
+
         digest = response.headers['docker-content-digest'];
     } catch (err) {
         console.log(`Error image not found in registry: ${err}`);
@@ -77,7 +90,7 @@ async function deleteImageFromRegistry(imageName,registryURL,registryUser,regist
                     'Accept': 'application/vnd.docker.distribution.manifest.v2+json'
                 },
                 httpsAgent,
-                data: null,     
+                data: null,
             };
             //console.log(`request: ${JSON.stringify(conf,null,2)}`);
             let delres = await axios(conf);
@@ -125,16 +138,16 @@ function followProgress(stream) {
                 }
             }
           }
-       
+
      });
 }
 async function pullImage(fullName) {
     //let fullName = registryURL + imageName;
     // let stream = await docker.pull(fullName);
     // let output = await followProgress(stream);
-    //console.log(`Pull result: ${output}`);   
+    //console.log(`Pull result: ${output}`);
     await execDockerCmd(['pull',fullName]);
-    
-    
+
+
     return;
 }

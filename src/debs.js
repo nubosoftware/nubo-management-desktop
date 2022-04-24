@@ -34,7 +34,7 @@ async function init() {
         await execDockerCmd(['login', '-u', registryUser, '-p',registryPassword,registryURL]);
     }
     initialized = true;
-}   
+}
 
 
 function getDefaultApps() {
@@ -76,8 +76,8 @@ function attachAppsToPlatform(platform, tasks) {
 
 /**
  * Create docker image the given user. If Image that contains the exact app already exists just use that image
- * Update the docker_image field in the users table 
- * @param {String} email 
+ * Update the docker_image field in the users table
+ * @param {String} email
  */
 async function createImageForUser(email,domain) {
     const { Common } = require('./mainModule').get();
@@ -113,17 +113,17 @@ async function createImageForUser(email,domain) {
 
         // look for the hash in the AppImages table
         let imageName;
-        let imageObj = await Common.db.Images.findOne({      
+        let imageObj = await Common.db.Images.findOne({
             where: {
                 maindomain: domain,
-                content_hash: hash                                
+                content_hash: hash
             },
         });
         if (imageObj) {
             imageName = imageObj.image_name;
             logger.info(`Hash found: ${hash}`);
         }
-        
+
         if (!imageName) {
             logger.info(`Hash not found: ${hash}!`);
             // generate image and create a file
@@ -134,7 +134,7 @@ async function createImageForUser(email,domain) {
                 maindomain: domain,
                 image_name: imageName,
                 content_hash: hash
-            });            
+            });
 
         } else {
             logger.info(`Image found: ${imageName}`);
@@ -225,7 +225,7 @@ async function addRemoveAppsForDevices(deviceIds, time, hrTime, email, packageNa
 
 /**
  * Create linux docker image that contains all the apps define in allDebApps array
- * @param {Array} allDebApps 
+ * @param {Array} allDebApps
  */
 async function createImage(allDebApps) {
     const { Common, CommonUtils } = require('./mainModule').get();
@@ -242,12 +242,12 @@ async function createImage(allDebApps) {
 
     await pullImage(baseImage);
 
-    let imageName = `user${crypto.randomBytes(16).toString('hex')}:latest`;    
+    let imageName = `user${crypto.randomBytes(16).toString('hex')}:latest`;
     let token = crypto.randomBytes(32).toString('hex');
     let buildFolder = `./docker_temp/${token}`;
-    
 
-    let srcList = ['Dockerfile'];   
+
+    let srcList = ['Dockerfile'];
     await fs.mkdir(buildFolder, { recursive: true });
     let debsFolder = CommonUtils.buildPath(Common.nfshomefolder, 'debs');
 
@@ -263,15 +263,15 @@ async function createImage(allDebApps) {
             await fs.copyFile(debSrcFile, dstFile);
             fileCmds.push(`COPY ${basename} /tmp/.`);
             fileCmds.push(`RUN apt install -y /tmp/${basename}`);
-            fileCmds.push(`RUN rm -f /tmp/${basename}`);            
+            fileCmds.push(`RUN rm -f /tmp/${basename}`);
             srcList.push(basename);
         } else {
-            aptCmds.push(`RUN apt install -y ${srcFile.packagename}`);           
+            aptCmds.push(`RUN apt install -y ${srcFile.packagename}`);
         }
     }
     let debFile = "";
     let buildDate=new Date().toDateString();
-    let dockerFileStr = `    
+    let dockerFileStr = `
 FROM ${baseImage}
 LABEL build_date="${buildDate}"
 RUN apt-get -y update
@@ -313,7 +313,7 @@ CMD ["supervisord"]`;
     const regex = /Successfully built ([a-fA-F0-9]+)/
     let m = stdout.match(regex);
     if (m && m[1]) {
-        imageID = m[1];        
+        imageID = m[1];
     } else {
         console.log(`Build error. Output: ${JSON.stringify(stdout,null,2)}`);
         throw new Error("Unable to build image");
@@ -337,13 +337,13 @@ CMD ["supervisord"]`;
 /**
  * Clean the system from all un-used images.
  * If domain name is provided do that only for the specific domain
- * @param {*} domain 
+ * @param {*} domain
  */
 async function cleanImages(domain) {
     const { Common } = require('./mainModule').get();
     const logger = Common.logger;
     try {
-        logger.info(`Running cleanImages job...`);
+        //logger.info(`Running cleanImages job...`);
         if (!initialized) {
             await init();
         }
@@ -352,7 +352,7 @@ async function cleanImages(domain) {
         let qu = {
             attributes: [
                 [fn('DISTINCT', col('docker_image')) ,'docker_image'],
-                'orgdomain',                
+                'orgdomain',
             ],
             where : {
                 docker_image: {
@@ -371,11 +371,11 @@ async function cleanImages(domain) {
                     assignedMap[`${imgObj.orgdomain}_${imgObj.docker_image}`] = imgObj;
                 }
             }
-        } 
+        }
 
         // get all registered images
         let q = {
-            attributes: ['maindomain','image_name'],            
+            attributes: ['maindomain','image_name'],
         };
         if (domain) {
             q.where = {
@@ -396,7 +396,7 @@ async function cleanImages(domain) {
                         console.log(`Image delete error. Image: ${Common.registryURL}/nubo/${imgObj.image_name}, Error: ${err}`);
                     }
                     try {
-                        await execDockerCmd(['image','rm',imgObj.image_name]);                    
+                        await execDockerCmd(['image','rm',imgObj.image_name]);
                     } catch (err) {
                         console.log(`Image delete error. Image: ${imgObj.image_name}, Error: ${err}`);
                     }
@@ -406,10 +406,10 @@ async function cleanImages(domain) {
                             image_name: imgObj.image_name
                         }
                     });
-                    
+
                 } else {
 
-                    //onsole.log(`Image ${assignedObj.docker_image} of domain ${assignedObj.orgdomain} found.`);                    
+                    //onsole.log(`Image ${assignedObj.docker_image} of domain ${assignedObj.orgdomain} found.`);
                     delete assignedMap[key];
                 }
             }
@@ -450,7 +450,7 @@ async function uploadApp(req, res) {
         let fileName = req.params.fileName;
         packageName = req.params.packageName;
         let app = {
-            packagename: packageName,           
+            packagename: packageName,
         }
         if (fileName) {
             let srcFilePath = CommonUtils.buildPath(Common.nfshomefolder, User.getUserStorageFolder(email), "media/Download/", fileName);
@@ -468,7 +468,7 @@ async function uploadApp(req, res) {
             throw new Error("Unable to fetch app details");
         }
 
-            
+
         await updateApkProgress(appDetails.packageName, "", appDetails.versionName, maindomain, appDetails.appName, appDetails.description, COPYING, '');
 
         let msg = "Install in progress";
@@ -565,7 +565,7 @@ async function fetchAppDetails(app) {
             const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', 'apt-exec.sh',
                 baseImage, 'show', app.packagename]);
             aptShow = stdout;
-        } else if (app.appFilePath && app.appFileName && app.srcFilePath) {            
+        } else if (app.appFilePath && app.appFileName && app.srcFilePath) {
             const { stdout } = await execDockerCmd(['run', '--rm', '--entrypoint', 'apt-exec.sh',
                 '-v', `${app.srcFilePath}:/tmp/${app.appFileName}`,
                 baseImage, 'show', `/tmp/${app.appFileName}`]);
@@ -573,7 +573,7 @@ async function fetchAppDetails(app) {
         } else {
             throw new Error("Invalid parameters. Both app.packagename and app.appFileName are missing");
         }
-        
+
         let debDetails = {};
         const lines = aptShow.split("\n");
         let prevLines = "";
@@ -628,7 +628,7 @@ async function attachToDomainDefaultApps(domain) {
             }
         }
     } catch (err) {
-        logger.error(`Error adding default apps to domain. Error: ${err}`,err);        
+        logger.error(`Error adding default apps to domain. Error: ${err}`,err);
     }
 }
 

@@ -12,7 +12,7 @@ function addPublicServerHandlers(server) {
 }
 
 function addPlatformServiceHandlers(server) {
-    const { Common } = require('./mainModule').get();    
+    const { Common } = require('./mainModule').get();
 }
 
 function restGet(req,res) {
@@ -42,7 +42,7 @@ function handleRestApiRequest(objectType, arg1, arg2, arg3, perms, adminLogin, r
         }
         return ret;
     };
-    if (objectType === 'apps') {        
+    if (objectType === 'apps') {
         if (!arg1) {
             if (req.method == "PUT" && req.params.appType == "deb") {
                 if (!checkPerm('/apps','w')) return true;
@@ -54,9 +54,9 @@ function handleRestApiRequest(objectType, arg1, arg2, arg3, perms, adminLogin, r
                 if (req.method == "GET") {
                     if (!checkPerm('/apps','r')) return true;
                     require('./debs').aptList(req,res);
-                    return true;           
+                    return true;
                 }
-            }            
+            }
         }
     }
     return false;
@@ -85,4 +85,5 @@ module.exports = {
     debs: require('./debs'),
     parametersMap: require('./parameters-map'),
     cronJobs: require('./cronJobs'),
+    recordings: require('./recordings'),
 }
