@@ -14,7 +14,7 @@ async function prepareVideoFile(filePath) {
     try {
 
         // run guacenc - create a raw m4v file
-        let baseImage = `nubosoftware/gateway:test`;
+        let baseImage = `nubosoftware/gateway:3.2`;
         const { stdout, stderr } = await execDockerCmd(['run', '--rm', '-v', `${Common.recording_path}:${Common.recording_path}`,
                 baseImage, '/usr/local/guacamole/bin/guacenc', '-s', '1280x960',filePath]);
         //console.log(`prepareVideoFile. stdout: ${stdout}, stderr: ${stderr}`);
